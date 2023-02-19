@@ -1,110 +1,72 @@
-version: '3'
+version: '3.7'
+
 services:
-    laravel.test:
+    otp6_test.fpm:
+        container_name: otp6_test.fpm
+        env_file: .env
         build:
-            context: ./vendor/laravel/sail/runtimes/8.2
+            context: docker/otp6_test.fpm
             dockerfile: Dockerfile
-            args:
-                WWWGROUP: '${WWWGROUP}'
-        image: sail-8.2/app
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
-        ports:
-            - '${APP_PORT:-80}:80'
-            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
-        environment:
-            WWWUSER: '${WWWUSER}'
-            LARAVEL_SAIL: 1
-            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
-            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+        working_dir: /var/www/api
+        restart: unless-stopped
         volumes:
-            - '.:/var/www/html'
-        networks:
-            - sail
+            - ./api:/var/www/api
+    otp6_test.cli:
+        container_name: otp6_test.cli
+        env_file: .env
+        build:
+            context: docker/otp6_test.cli
+            dockerfile: Dockerfile
+        working_dir: /var/www/api
+        volumes:
+            - ./api:/var/www/api
+    otp6_test.worker:
+        container_name: otp6_test.worker
+        env_file: .env
+        build:
+            context: docker/otp6_test.worker
+            dockerfile: Dockerfile
+        working_dir: /var/www/api
+        restart: unless-stopped
+        volumes:
+            - ./api:/var/www/api
+    otp6_test.mysql:
+        container_name: otp6_test.mysql
+        image: mysql:8
+        env_file: .env
+        command: --default-authentication-plugin=mysql_native_password
+        restart: always
+        ports:
+            - ${DOCKER_MYSQL_PORT}:3306
+        volumes:
+            - ./docker/otp6_test.mysql/data/:/var/lib/mysql/
+        environment:
+            MYSQL_ROOT_PASSWORD: ${DOCKER_NGINX_PORT}
+            MYSQL_DATABASE: ${DOCKER_MYSQL_DB}
+            MYSQL_USER: ${DOCKER_MYSQL_USER}
+    otp6_test.node:
+        container_name: otp6_test.node
+        volumes:
+            - ./frontend:/var/www/frontend
+        working_dir: /var/www/frontend
+        #    entrypoint: sh -c "npm install && npm run build && npm run start"
+        entrypoint: sh -c "npm install && npm run dev"
+        build:
+            context: ./docker/otp6_test.node
+            dockerfile: Dockerfile
+        restart: unless-stopped
+    otp6_test.nginx:
+        container_name: otp6_test.nginx
+        image: nginx:latest
+        env_file: .env
+        restart: unless-stopped
         depends_on:
-            - mysql
-            - redis
-            - meilisearch
-            - mailpit
-            - selenium
-    mysql:
-        image: 'mysql/mysql-server:8.0'
+            - otp6_test.fpm
+            - otp6_test.node
         ports:
-            - '${FORWARD_DB_PORT:-3306}:3306'
-        environment:
-            MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
-            MYSQL_ROOT_HOST: '%'
-            MYSQL_DATABASE: '${DB_DATABASE}'
-            MYSQL_USER: '${DB_USERNAME}'
-            MYSQL_PASSWORD: '${DB_PASSWORD}'
-            MYSQL_ALLOW_EMPTY_PASSWORD: 1
+            - ${DOCKER_NGINX_PORT}:80
         volumes:
-            - 'sail-mysql:/var/lib/mysql'
-            - './vendor/laravel/sail/database/mysql/create-testing-database.sh:/docker-entrypoint-initdb.d/10-create-testing-database.sh'
-        networks:
-            - sail
-        healthcheck:
-            test:
-                - CMD
-                - mysqladmin
-                - ping
-                - '-p${DB_PASSWORD}'
-            retries: 3
-            timeout: 5s
-    redis:
-        image: 'redis:alpine'
-        ports:
-            - '${FORWARD_REDIS_PORT:-6379}:6379'
-        volumes:
-            - 'sail-redis:/data'
-        networks:
-            - sail
-        healthcheck:
-            test:
-                - CMD
-                - redis-cli
-                - ping
-            retries: 3
-            timeout: 5s
-    meilisearch:
-        image: 'getmeili/meilisearch:latest'
-        ports:
-            - '${FORWARD_MEILISEARCH_PORT:-7700}:7700'
-        volumes:
-            - 'sail-meilisearch:/meili_data'
-        networks:
-            - sail
-        healthcheck:
-            test:
-                - CMD
-                - wget
-                - '--no-verbose'
-                - '--spider'
-                - 'http://localhost:7700/health'
-            retries: 3
-            timeout: 5s
-    mailpit:
-        image: 'axllent/mailpit:latest'
-        ports:
-            - '${FORWARD_MAILPIT_PORT:-1025}:1025'
-            - '${FORWARD_MAILPIT_DASHBOARD_PORT:-8025}:8025'
-        networks:
-            - sail
-    selenium:
-        image: selenium/standalone-chrome
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
-        volumes:
-            - '/dev/shm:/dev/shm'
-        networks:
-            - sail
-networks:
-    sail:
-        driver: bridge
-volumes:
-    sail-mysql:
-        driver: local
-    sail-redis:
-        driver: local
-    sail-meilisearch:
-        driver: local
+            - ./api:/var/www/api
+            - ./frontend:/var/www/frontend
+            - ./docker/otp6_test.nginx/conf/default.conf:/etc/nginx/conf.d/default.conf
+
