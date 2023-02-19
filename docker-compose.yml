@@ -11,6 +11,8 @@ services:
         restart: unless-stopped
         volumes:
             - ./api:/var/www/api
+        depends_on:
+            - otp6_test.mysql
     otp6_test.cli:
         container_name: otp6_test.cli
         env_file: .env
@@ -20,6 +22,8 @@ services:
         working_dir: /var/www/api
         volumes:
             - ./api:/var/www/api
+        depends_on:
+            - otp6_test.mysql
     otp6_test.worker:
         container_name: otp6_test.worker
         env_file: .env
@@ -34,16 +38,16 @@ services:
         container_name: otp6_test.mysql
         image: mysql:8
         env_file: .env
-        command: --default-authentication-plugin=mysql_native_password
-        restart: always
+        restart: unless-stopped
         ports:
             - ${DOCKER_MYSQL_PORT}:3306
         volumes:
             - ./docker/otp6_test.mysql/data/:/var/lib/mysql/
         environment:
-            MYSQL_ROOT_PASSWORD: ${DOCKER_NGINX_PORT}
+            MYSQL_ROOT_PASSWORD: ${DOCKER_MYSQL_ROOT_PASSWORD}
             MYSQL_DATABASE: ${DOCKER_MYSQL_DB}
             MYSQL_USER: ${DOCKER_MYSQL_USER}
+            MYSQL_PASSWORD: ${DOCKER_MYSQL_PASSWORD}
     otp6_test.node:
         container_name: otp6_test.node
         volumes:
